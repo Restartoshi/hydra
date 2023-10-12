@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface Option {
   id: number;
@@ -13,7 +13,43 @@ const HydraPoll: React.FC = () => {
     { id: 3, text: 'Option 3', votes: 0 },
   ]);
 
+  // WebSocket connection using useRef
+  const ws = useRef<WebSocket | null>(null);
+
+  // Function to send a vote message through WebSocket
   const handleVote = (optionId: number) => {
+    if (ws.current) {
+      const message = `User voted for Option ${optionId}`;
+      console.log('Sending message:', message);
+      ws.current.send(message);
+    }
+  };
+
+  useEffect(() => {
+    // Create a new WebSocket connection
+    ws.current = new WebSocket('ws://localhost:5001'); // Replace with your WebSocket server address
+
+    ws.current.addEventListener('message', (event) => {
+      // Handle incoming messages here
+      console.log('Received message:', event.data);
+
+      // Assuming the server responds with a message like "Vote for Option X accepted"
+      const match = event.data.match(/Vote for Option (\d+) accepted/);
+      if (match) {
+        const optionId = parseInt(match[1], 10);
+        updateVoteCount(optionId);
+      }
+    });
+
+    return () => {
+      // Close the WebSocket connection on unmount
+      if (ws.current) {
+        ws.current.close();
+      }
+    };
+  }, []); // Empty dependency array to run this effect only once
+
+  const updateVoteCount = (optionId: number) => {
     setOptions((prevOptions) =>
       prevOptions.map((option) =>
         option.id === optionId
@@ -42,8 +78,3 @@ const HydraPoll: React.FC = () => {
 };
 
 export default HydraPoll;
-
-
-
-
-
