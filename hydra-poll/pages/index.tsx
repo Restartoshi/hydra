@@ -1,6 +1,6 @@
 import Head from "next/head";
 import { CardanoWallet, MeshBadge } from "@meshsdk/react";
-// import {Poll} from "pages/poll/Poll";
+import HydraPoll from "./poll/poll";
 
 export default function Home() {
   return (
@@ -20,12 +20,7 @@ export default function Home() {
       </Head>
 
       <main className="main">
-        <h1 className="title">
-          <a href="https://hydra.family">Hydra</a> Poll
-        </h1>
-
-        <div className="grid">
-        </div>
+        <HydraPoll/>
       </main>
 
       <footer className="footer">
