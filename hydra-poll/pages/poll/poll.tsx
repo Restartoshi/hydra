@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react'
+import { Blockfrost, Lucid, Network } from "lucid-cardano"
 
 interface Option {
-  id: number;
-  text: string;
-  votes: number;
+  id: number
+  text: string
+  votes: number
 }
 
 const HydraPoll: React.FC = () => {
@@ -11,43 +12,87 @@ const HydraPoll: React.FC = () => {
     { id: 1, text: 'Option 1', votes: 0 },
     { id: 2, text: 'Option 2', votes: 0 },
     { id: 3, text: 'Option 3', votes: 0 },
-  ]);
+  ])
 
   // WebSocket connection using useRef
-  const ws = useRef<WebSocket | null>(null);
+  const ws = useRef<WebSocket | null>(null)
+  const lucid = useRef<Lucid | null>(null)
+  const lucidLoaded = useRef(false)
 
   // Function to send a vote message through WebSocket
-  const handleVote = (optionId: number) => {
-    if (ws.current) {
-      const message = `User voted for Option ${optionId}`;
-      console.log('Sending message:', message);
-      ws.current.send(message);
+  const handleVote = async (optionId: number) => {
+    if (ws.current && lucid.current) {
+      console.log('User voted for Option:', optionId)
+      console.log(lucid.current)
+      const result = await buildTx(optionId)
+      console.log(result);
+      ws.current.send(result)
     }
-  };
+  }
+
+  const buildTx = async function (voteOption: number) {
+    if (lucid.current) {
+      const tx = await lucid.current.newTx()
+                            .payToAddress("addr_test1vp8m20m650s8u0em4pgka569zx0fssvzywzuqvrnzysfksgxeq2s2", { lovelace: 0n })
+                            .attachMetadata(1, { msg: voteOption})
+                            .complete()
+      const signedTx = await tx.sign().complete()
+      const txHash = await signedTx.submit()
+      console.log(signedTx.toString());
+      const messageToSend = JSON.stringify({"tag": "NewTx", "transaction": signedTx.toString()})
+      console.log(messageToSend);
+      return messageToSend;
+    } else {
+      console.error("Cant build tx due to missing Lucid instance")
+    }
+  }
 
   useEffect(() => {
-    // Create a new WebSocket connection
-    ws.current = new WebSocket('ws://localhost:5001'); // Replace with your WebSocket server address
+    const initLucid = async () => {
+      lucid.current = await Lucid.new(
+          new Blockfrost("https://cardano-preprod.blockfrost.io/api/v0", "preprodjH10USUsLVtvpIGL1lWV25JJtC6EOpqn"),
+          "Preprod",
+        );
+
+       const namiEnabled = await window.cardano.nami.isEnabled();
+
+       if (!namiEnabled) {
+         const nami = await window.cardano.nami.enable();
+         lucid.current.selectWallet(nami);
+       }
+    }
+
+    if (!lucidLoaded.current){
+      initLucid();
+    }
+
+    return () => {
+      lucidLoaded.current = true;
+    }
+  }, [])
+
+  useEffect(() => {
+    ws.current = new WebSocket('ws://localhost:4001') // Replace with your WebSocket server address
 
     ws.current.addEventListener('message', (event) => {
       // Handle incoming messages here
-      console.log('Received message:', event.data);
+      console.log('Received message:', event.data)
 
       // Assuming the server responds with a message like "Vote for Option X accepted"
-      const match = event.data.match(/Vote for Option (\d+) accepted/);
+      const match = event.data.match(/Vote for Option (\d+) accepted/)
       if (match) {
-        const optionId = parseInt(match[1], 10);
-        updateVoteCount(optionId);
+        const optionId = parseInt(match[1], 10)
+        updateVoteCount(optionId)
       }
-    });
+    })
+
 
     return () => {
-      // Close the WebSocket connection on unmount
       if (ws.current) {
-        ws.current.close();
+        ws.current.close()
       }
-    };
-  }, []); // Empty dependency array to run this effect only once
+    }
+  }, [])
 
   const updateVoteCount = (optionId: number) => {
     setOptions((prevOptions) =>
@@ -56,8 +101,8 @@ const HydraPoll: React.FC = () => {
           ? { ...option, votes: option.votes + 1 }
           : option
       )
-    );
-  };
+    )
+  }
 
   return (
     <div className="hydra-poll">
@@ -74,7 +119,7 @@ const HydraPoll: React.FC = () => {
         ))}
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default HydraPoll;
+export default HydraPoll
