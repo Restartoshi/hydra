@@ -23,21 +23,24 @@ const HydraPoll: React.FC = () => {
   const handleVote = async (optionId: number) => {
     if (ws.current && lucid.current) {
       console.log('User voted for Option:', optionId)
-      console.log(lucid.current)
+      const utxos = await getUTxO();
+      console.log("head utxos", utxos)
       const result = await buildTx(optionId)
       console.log(result);
       ws.current.send(result)
     }
   }
+  const getUTxO = async function(){
+    ws.current.send(JSON.stringify({"tag":"GetUTxO"}));
+  }
 
   const buildTx = async function (voteOption: number) {
     if (lucid.current) {
       const tx = await lucid.current.newTx()
-                            .payToAddress("addr_test1vp8m20m650s8u0em4pgka569zx0fssvzywzuqvrnzysfksgxeq2s2", { lovelace: 0n })
+                            .payToAddress("addr_test1vp5cxztpc6hep9ds7fjgmle3l225tk8ske3rmwr9adu0m6qchmx5z", { lovelace: 0n })
                             .attachMetadata(1, { msg: voteOption})
                             .complete()
       const signedTx = await tx.sign().complete()
-      const txHash = await signedTx.submit()
       console.log(signedTx.toString());
       const messageToSend = JSON.stringify({"tag": "NewTx", "transaction": signedTx.toString()})
       console.log(messageToSend);
