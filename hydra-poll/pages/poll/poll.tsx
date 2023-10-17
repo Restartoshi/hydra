@@ -69,11 +69,14 @@ const HydraPoll: React.FC = () => {
       <h1 className="title">
         <a href="https://hydra.family">Hydra </a>Poll
       </h1>
+      <h2>Vote for the next Hydra feature</h2>
       <div className="options-container">
         {options.map((option) => (
           <div className="option" key={option.id}>
-            <p>{option.text}</p>
-            <p>Votes: {option.votes}</p>
+            <div>
+              <h3>{option.text}</h3>
+              <h4>{option.votes}</h4>
+            </div>
             <button onClick={() => handleVote(option.id)}>Vote</button>
           </div>
         ))}
