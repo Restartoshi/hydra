@@ -20,6 +20,28 @@ data Pixel = Pixel
   { x, y, red, green, blue :: Word8
   }
 
+vote :: NetworkId -> FilePath -> Connection -> Integer -> IO ()
+vote networkId signingKeyPath cnx pollVote = do
+  sk <- readFileTextEnvelopeThrow (AsSigningKey AsPaymentKey) signingKeyPath
+  let myAddress = mkVkAddress networkId $ getVerificationKey sk
+  flushQueue
+  sendTextData @Text cnx $ decodeUtf8 $ Aeson.encode (GetUTxO @Tx)
+  msg <- receiveData cnx
+  putStrLn $ "Received from hydra-node: " <> show msg
+  case Aeson.eitherDecode @(ServerOutput Tx) msg of
+    Right (GetUTxOResponse _ utxo) ->
+      case UTxO.find (\TxOut{txOutAddress} -> txOutAddress == myAddress) utxo of
+        Nothing -> fail $ "No UTxO owned by " <> show myAddress
+        Just (txIn, txOut) ->
+          case mkVoteTx (txIn, txOut) sk pollVote of
+            Right tx -> sendTextData cnx $ Aeson.encode $ NewTx tx
+            Left err -> fail $ "Failed to build pixel transaction " <> show err
+    Right _ -> fail $ "Unexpected server answer:  " <> decodeUtf8 msg
+    Left e -> fail $ "Failed to decode server answer:  " <> show e
+ where
+  flushQueue =
+    race_ (threadDelay 0.25) (void (receive cnx) >> flushQueue)
+
 paintPixel :: NetworkId -> FilePath -> Connection -> Pixel -> IO ()
 paintPixel networkId signingKeyPath cnx pixel = do
   sk <- readFileTextEnvelopeThrow (AsSigningKey AsPaymentKey) signingKeyPath
@@ -74,3 +96,27 @@ mkPaintTx (txin, txOut) sk Pixel{x, y, red, green, blue} = do
   metadata = TxMetadataInEra $ TxMetadata $ fromList [(14, listOfInts)]
 
   listOfInts = TxMetaList $ TxMetaNumber . fromIntegral <$> [x, y, red, green, blue]
+
+-- | Create a zero-fee, payment cardano transaction with poll vote metadata, which
+-- just re-spends the given UTxO.
+mkVoteTx ::
+  -- | UTxO to spend
+  (TxIn, TxOut CtxUTxO) ->
+  -- | Signing key which owns the UTxO.
+  SigningKey PaymentKey ->
+  Integer ->
+  Either TxBodyError Tx
+mkVoteTx (txin, txOut) sk pollVote = do
+  body <- createAndValidateTransactionBody bodyContent
+  pure $ signShelleyTransaction body [WitnessPaymentKey sk]
+ where
+  bodyContent =
+    defaultTxBodyContent
+      & addTxIn (txin, BuildTxWith $ KeyWitness KeyWitnessForSpending)
+      & addTxOut (toTxContext txOut)
+      & setTxFee (TxFeeExplicit $ Lovelace 0)
+      & setTxMetadata metadata
+
+  metadata = TxMetadataInEra $ TxMetadata $ fromList [(14, listOfInts)]
+
+  listOfInts = TxMetaNumber pollVote

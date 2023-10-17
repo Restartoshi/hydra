@@ -4,7 +4,7 @@ import Hydra.Prelude
 
 import Hydra.Cardano.Api (NetworkId (..), NetworkMagic (..))
 import Hydra.Network (Host, readHost)
-import Hydra.Painter (Pixel (..), paintPixel, withClient)
+import Hydra.Painter (Pixel (..), paintPixel, withClient, vote)
 import Network.HTTP.Types.Status (status200, status400, status404)
 import Network.Wai (
   Application,
@@ -78,6 +78,14 @@ httpApp networkId key cnx req send =
         Just [x, y, red, green, blue] -> do
           putStrLn $ show (x, y) <> " -> " <> show (red, green, blue)
           paintPixel networkId key cnx Pixel{x, y, red, green, blue}
+          send $ responseLBS status200 corsHeaders "OK"
+        _ ->
+          send handleError
+    ("GET", "poll" : args) -> do
+      case traverse (readMay . toString) args of
+        Just [x] -> do
+          print x
+          vote networkId key cnx x
           send $ responseLBS status200 corsHeaders "OK"
         _ ->
           send handleError
