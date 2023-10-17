@@ -17,6 +17,7 @@ export default function Home() {
           rel="stylesheet"
           key="mesh-demo"
         />
+        <script src="https://unpkg.com/cbor-web"></script>
       </Head>
 
       <main className="main">

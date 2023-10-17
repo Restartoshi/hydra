@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Blockfrost, Lucid, Network } from "lucid-cardano"
-
 interface Option {
   id: number
   text: string
@@ -9,83 +8,41 @@ interface Option {
 
 const HydraPoll: React.FC = () => {
   const [options, setOptions] = useState<Option[]>([
-    { id: 1, text: 'Option 1', votes: 0 },
-    { id: 2, text: 'Option 2', votes: 0 },
-    { id: 3, text: 'Option 3', votes: 0 },
+    { id: 1, text: 'Incremental commits/decommits', votes: 0 },
+    { id: 2, text: 'Dynamic Hydra Parties', votes: 0 },
+    { id: 3, text: 'Interconnected Hydra Heads', votes: 0 },
   ])
 
   // WebSocket connection using useRef
   const ws = useRef<WebSocket | null>(null)
-  const lucid = useRef<Lucid | null>(null)
-  const lucidLoaded = useRef(false)
 
   // Function to send a vote message through WebSocket
   const handleVote = async (optionId: number) => {
-    if (ws.current && lucid.current) {
-      console.log('User voted for Option:', optionId)
-      const utxos = await getUTxO();
-      console.log("head utxos", utxos)
-      const result = await buildTx(optionId)
-      console.log(result);
-      ws.current.send(result)
-    }
+    fetch("http://localhost:1337/poll/" + optionId, {"mode": "no-cors"})
+         .then((res) => res.json())
+         .then((data) => {
+            console.log(data);
+         })
+         .catch((err) => {
+            console.log(err.message);
+         });
   }
-  const getUTxO = async function(){
-    ws.current.send(JSON.stringify({"tag":"GetUTxO"}));
-  }
-
-  const buildTx = async function (voteOption: number) {
-    if (lucid.current) {
-      const tx = await lucid.current.newTx()
-                            .payToAddress("addr_test1vp5cxztpc6hep9ds7fjgmle3l225tk8ske3rmwr9adu0m6qchmx5z", { lovelace: 0n })
-                            .attachMetadata(1, { msg: voteOption})
-                            .complete()
-      const signedTx = await tx.sign().complete()
-      console.log(signedTx.toString());
-      const messageToSend = JSON.stringify({"tag": "NewTx", "transaction": signedTx.toString()})
-      console.log(messageToSend);
-      return messageToSend;
-    } else {
-      console.error("Cant build tx due to missing Lucid instance")
-    }
-  }
-
-  useEffect(() => {
-    const initLucid = async () => {
-      lucid.current = await Lucid.new(
-          new Blockfrost("https://cardano-preprod.blockfrost.io/api/v0", "preprodjH10USUsLVtvpIGL1lWV25JJtC6EOpqn"),
-          "Preprod",
-        );
-
-       const namiEnabled = await window.cardano.nami.isEnabled();
-
-       if (!namiEnabled) {
-         const nami = await window.cardano.nami.enable();
-         lucid.current.selectWallet(nami);
-       }
-    }
-
-    if (!lucidLoaded.current){
-      initLucid();
-    }
-
-    return () => {
-      lucidLoaded.current = true;
-    }
-  }, [])
 
   useEffect(() => {
     ws.current = new WebSocket('ws://localhost:4001') // Replace with your WebSocket server address
 
     ws.current.addEventListener('message', (event) => {
-      // Handle incoming messages here
-      console.log('Received message:', event.data)
 
-      // Assuming the server responds with a message like "Vote for Option X accepted"
-      const match = event.data.match(/Vote for Option (\d+) accepted/)
-      if (match) {
-        const optionId = parseInt(match[1], 10)
-        updateVoteCount(optionId)
+      const metadataLabel = 14;
+      let msg = JSON.parse(event.data);
+      if (msg.tag == "TxValid") {
+
+      if (msg.transaction.auxiliaryData != null) {
+        console.log("Transaction has auxiliary data", msg.transaction.auxiliaryData);
+        const aux = cbor.decodeFirstSync(msg.transaction.auxiliaryData).value;
+        const voteOption = (aux.get(0) || aux.get(1)).get(metadataLabel);
+        updateVoteCount(voteOption)
+      }
       }
     })
 
